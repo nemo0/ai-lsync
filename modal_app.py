@@ -7,6 +7,8 @@ from copy import deepcopy
 import requests
 from urllib.parse import urlparse
 from typing import Optional
+import inspect # Keep this import for diagnostics if needed, or remove if confident
+from starlette.concurrency import run_in_threadpool 
 
 from fastapi import FastAPI, UploadFile, File, Form, Response, HTTPException
 
@@ -82,7 +84,7 @@ latentsync_image = (
         "numpy==1.26.4",
         "kornia==0.8.0",
         "insightface==0.7.3",
-        "onnxruntime-gpu==1.21.0",
+        "onnxruntime-gpu==1.21.0", # This will fall back to CPU without nvidia-cuda-toolkit
         "DeepCache==0.1.1",
         "fastapi",
         "uvicorn",
@@ -107,7 +109,7 @@ latentsync_image = (
     gpu="A10G", # A10G has 24GB VRAM, suitable for the 18GB requirement
     image=latentsync_image,
     network_file_systems={str(CHECKPOINT_PATH): volume},
-    timeout=600, # Set a 10-minute timeout for inference
+    timeout=2700, # Increased timeout to 45 minutes for potentially long videos
 )
 class LatentSync:
     @modal.enter()
@@ -170,7 +172,7 @@ class LatentSync:
             inference_steps=inference_steps,
             guidance_scale=guidance_scale,
             seed=seed,
-            temp_dir=str(output_dir),
+            temp_dir=str(output_dir), # temp_dir is the same as output_dir for simplicity
             enable_deepcache=True, # Enable for better performance
         )
         
@@ -191,8 +193,14 @@ class LatentSync:
             print("Inference complete.")
             
             # Read the generated video file and return its content
+            # This file should now exist and be correctly populated
             with open(output_video_path, "rb") as f:
                 content = f.read()
+            
+            # --- DEBUG PRINT FOR CONTENT LENGTH BEFORE RETURNING ---
+            print(f"[DEBUG] Content read from output_video_path length: {len(content)} bytes")
+            # --- END DEBUG PRINT ---
+
             return content
             
         except Exception as e:
@@ -271,7 +279,11 @@ async def lipsync(
     # --- Step 3: Run Inference ---
     # Instantiate the Modal class and call the generation method remotely
     model = LatentSync()
-    output_video_bytes = model.generate.remote(
+    
+    # *** REVISED SOLUTION: Use run_in_threadpool to handle the synchronous-acting remote call ***
+    # This keeps the FastAPI endpoint async but prevents blocking the event loop.
+    output_video_bytes = await run_in_threadpool(
+        model.generate.remote, # Pass the callable (which returns bytes synchronously in this context)
         video_bytes,
         audio_bytes,
         video_filename,
@@ -280,6 +292,7 @@ async def lipsync(
         inference_steps,
         seed
     )
+    # *** END REVISED SOLUTION ***
     
     # --- Step 4: Return Result ---
     # Return the generated video as a response
@@ -290,7 +303,7 @@ async def lipsync(
 @app.function(
     image=latentsync_image,
     network_file_systems={str(CHECKPOINT_PATH): volume},
-    timeout=900,
+    timeout=2700, # Increased timeout to 45 minutes for the web server
 )
 @modal.asgi_app()
 def web_server():

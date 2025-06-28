@@ -4,22 +4,48 @@ from .whisper import load_model
 import numpy as np
 import torch
 import os
-from pathlib import Path
-
+from pathlib import Path # Ensure Path is imported
 
 class Audio2Feature:
     def __init__(
         self,
-        model_path="checkpoints/whisper/tiny.pt",
+        model_path="checkpoints/whisper/tiny.pt", # This is the input path string
         device=None,
         audio_embeds_cache_dir=None,
         num_frames=16,
         audio_feat_length=[2, 2],
     ):
-        self.model = load_model(model_path, device)
+        # Determine the actual model name (e.g., 'tiny') from the model_path string
+        # And the directory where the model file is located.
+        
+        # Convert the input model_path string to a Path object for easier manipulation
+        model_full_path = Path(model_path)
+        
+        # The model_name expected by whisper.load_model is the file stem (e.g., 'tiny' from 'tiny.pt')
+        model_name_for_whisper = model_full_path.stem 
+
+        # The download_root should be the directory where the .pt file resides
+        # In your Modal setup, it's "checkpoints/whisper" (which maps to /checkpoints/whisper in Modal)
+        whisper_download_directory = model_full_path.parent 
+
+        # Set default device if not provided (important for a robust setup)
+        if device is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        # Initialize the Whisper model
+        # Pass the extracted model_name_for_whisper and the download_root.
+        self.model = load_model(
+            model_name_for_whisper, 
+            device=device, 
+            download_root=str(whisper_download_directory) # Convert Path object to string for the argument
+        )
+
         self.audio_embeds_cache_dir = audio_embeds_cache_dir
-        if audio_embeds_cache_dir is not None and audio_embeds_cache_dir != "":
-            Path(audio_embeds_cache_dir).mkdir(parents=True, exist_ok=True)
+        
+        # Ensure cache directory exists if provided and not empty
+        if self.audio_embeds_cache_dir is not None and self.audio_embeds_cache_dir != "":
+            Path(self.audio_embeds_cache_dir).mkdir(parents=True, exist_ok=True)
+            
         self.num_frames = num_frames
         self.embedding_dim = self.model.dims.n_audio_state
         self.audio_feat_length = audio_feat_length
