@@ -10,13 +10,24 @@ from pathlib import Path
 class Audio2Feature:
     def __init__(
         self,
-        model_path="checkpoints/whisper/tiny.pt",
+        # The model_path argument passed here is conceptually for where the model *should* be,
+        # but the load_model function needs a specific way to find it.
+        # We'll use this argument to construct the download_root if needed.
+        model_path="checkpoints/whisper/tiny.pt", # This still acts as a default/reference
         device=None,
         audio_embeds_cache_dir=None,
         num_frames=16,
         audio_feat_length=[2, 2],
     ):
-        self.model = load_model(model_path, device)
+        # Determine the absolute path to the whisper model directory
+        # CHECKPOINT_PATH is /checkpoints from modal_app.py
+        # So, the whisper models are in /checkpoints/whisper/
+        whisper_download_root = Path("/checkpoints") / "whisper"
+        print(f"Loading Whisper model from download_root: {whisper_download_root}")
+
+        # Use the 'download_root' argument of load_model to specify where to find 'tiny.pt'
+        self.model = load_model("tiny", device=device, download_root=str(whisper_download_root))
+        
         self.audio_embeds_cache_dir = audio_embeds_cache_dir
         if audio_embeds_cache_dir is not None and audio_embeds_cache_dir != "":
             Path(audio_embeds_cache_dir).mkdir(parents=True, exist_ok=True)
