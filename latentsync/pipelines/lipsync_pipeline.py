@@ -418,13 +418,14 @@ class LipsyncPipeline(DiffusionPipeline):
                 # Fill up to num_frames if needed
                 n_valid = ref_pixel_values.shape[0]
                 if n_valid < num_frames:
-                    # Create dummy tensors of the same shape as a frame
-                    dummy_ref = torch.zeros_like(ref_pixel_values[0])
-                    dummy_masked = torch.zeros_like(masked_pixel_values[0])
-                    dummy_mask = torch.zeros_like(masks[0])
-                    ref_pixel_values = torch.cat([ref_pixel_values, dummy_ref.repeat(num_frames - n_valid, 1, 1, 1)], dim=0)
-                    masked_pixel_values = torch.cat([masked_pixel_values, dummy_masked.repeat(num_frames - n_valid, 1, 1, 1)], dim=0)
-                    masks = torch.cat([masks, dummy_mask.repeat(num_frames - n_valid, 1, 1, 1)], dim=0)
+                    # Repeat the last valid frame instead of filling
+                    last_valid_ref = ref_pixel_values[-1].unsqueeze(0)
+                    last_valid_masked = masked_pixel_values[-1].unsqueeze(0)
+                    last_valid_mask = masks[-1].unsqueeze(0)
+                    repeat_count = num_frames - n_valid
+                    ref_pixel_values = torch.cat([ref_pixel_values, last_valid_ref.repeat(repeat_count, 1, 1, 1)], dim=0)
+                    masked_pixel_values = torch.cat([masked_pixel_values, last_valid_masked.repeat(repeat_count, 1, 1, 1)], dim=0)
+                    masks = torch.cat([masks, last_valid_mask.repeat(repeat_count, 1, 1, 1)], dim=0)
             else:
                 ref_pixel_values, masked_pixel_values, masks = None, None, None
 
